@@ -1,0 +1,12 @@
+{%extends "layout.html"%}
+
+{%block content%}
+<div class="main-page">
+    <h1 id="title">Bisca</h1>
+    <div class="play-buttons">
+    <a href="url_for('static', filename='example.html')"><button type="button">Play with Bot</button></a>
+    <a href="url_for('static', filename='example.html')"><button type="button">Play Online</button></a>
+    </div>
+    <div id="app"><h1>[[name.toUpperCase()]]</h1></div>
+</div>
+{%endblock%}
