@@ -3,9 +3,13 @@
 {%block content%}
 <div id="app">
     <div class="relative w-full h-screen  bg-gradient-to-br from-green-900 via-green-700 to-green-800 shadow-[inset_0_0_100px_rgba(0,0,0,0.6)]">
-        <players-deck :player-id="id" :players-deck-size="playersDeckSize" :player-deck="playerDeck" class="absolute inset-0 z-50"></players-deck>
-        <discart-stack :table-deck="tableDeck" :player-id="id" class="absolute inset-0 z-10"></discart-stack>
-        <deck :deck-size="deckSize" class="absolute left-[35%] top-[25%] z-20"></deck>
+        <players-deck :player-id="id" :players-deck-size="playersDeckSize" :player-deck="playerDeck" @play-card="playCard" class="absolute inset-0 z-50"></players-deck>
+        <discart-stack :deck="tableDeck" :player-id="id" class="absolute inset-0 z-10"></discart-stack>
+        <main-deck :deck-size="mainDeckSize" :trunfo-card="trunfoCard" class="absolute inset-0"></main-deck>
+        <scoreboard v-if="gameStarded" :own-team-score="ownTeamScore['global']" :opponent-team-score="opponentTeamScore['global']" class="absolute inset-0"></scoreboard>
+        <players-stack :player-id="id" :played-cards="playedCards" :own-team-score="ownTeamScore['regional']" :opponent-team-score="opponentTeamScore['regional']" class="absolute inset-0"></players-stack>
+        <button v-if="isHost && !gameStarded" @click="startGame()" class="absolute bottom-48 left-1/2 -translate-x-1/2 z-50 w-48 h-28 bg-amber-400 ring-2 ring-amber-300/40 text-black text-xl border-2 border-neutral-800 rounded-full cursor-pointer hover:bg-amber-600 hover:ring-amber-200/60 transition-all duration-200">Começar o jogo</button>
+        <h1 v-if="endGame" class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-36 h-28 border-2 border-stone-950 bg-black text-white font-bold">Jogadores ((winners[0])) e ((winners[1])) ganharam!</h1>
     </div>
 </div>
 {%endblock%}

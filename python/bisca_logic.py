@@ -30,6 +30,8 @@ class game:
         self.team_score=[0,0] 
         self.global_score=[0,0]
         self.table_deck=[]
+        self.played_cards=[]
+        self.gained_cards=[0,0]
         while True:
             random_card=randint(0, len(self.deck)-1)
             if self.deck[random_card]["number"] not in ('7','A'):   
@@ -74,7 +76,7 @@ class game:
             hand_value += max(0, value[card["number"]])
 
         self.team_score[winner%2]+=hand_value
-
+        self.gained_cards[winner%2]+=len(self.table_deck)
         if is_played_A and is_played_7!=-1:
             if winner%2!=is_played_7:
                 self.global_score[winner%2]+=2
@@ -93,7 +95,7 @@ class game:
         
         self.current_player_number=winner
         self.table_deck.clear()
-        return {"type": "hand over", "content": self.team_score}
+        return {"type": "hand over", "content": self.get_general_state()}
     
     def _finish_round(self):
         if self.team_score[0]>90:
@@ -115,6 +117,8 @@ class game:
         self.initial_player=(self.initial_player+1)%self.players_number
         self.team_score=[0,0] 
         self.table_deck.clear()
+        self.played_cards.clear()
+        self.gained_cards=[0,0]
         while True:
             random_card=randint(0, len(self.deck)-1)
             if self.deck[random_card]["number"] not in ('7','A'):   
@@ -133,9 +137,9 @@ class game:
                
     def _finish_game(self):
         if self.global_score[0]>=4:
-            return {"type": "game over", "content": [2,4]}
-        elif self.global_score[1]>=4:
             return {"type": "game over", "content": [1,3]}
+        elif self.global_score[1]>=4:
+            return {"type": "game over", "content": [2,4]}
         else:
             raise ValueError("Nenhum time venceu")
 
@@ -144,10 +148,10 @@ class game:
             raise ValueError("Mesa cheia")
         
         current_player=self.players[self.current_player_number]
-        if card["naipe"]==self.trunfo and len(current_player)!=1:
-            if card["number"]=='7' and len(self.table_deck)==3:  
+        if card["naipe"]==self.trunfo:
+            if card["number"]=='7' and len(self.table_deck)==3 and len(current_player)==3:  
                 raise ValueError("7 jogado no pé")
-            if card["number"]=='A' and not self.played_7: 
+            if card["number"]=='A' and not self.played_7 and len(current_player)!=1: 
                 raise ValueError("Ás jogado antes do 7")
 
         is_possible=False
@@ -158,8 +162,9 @@ class game:
                     self.players[self.current_player_number][iterador], self.deck[0] = self.trunfo_card, card
                     trunfo_card=self.trunfo_card
                     self.trunfo_card=card
-                    return {"type": "trade", "content": [card, trunfo_card]}
+                    return {"type": "trade", "content": {"new_trunfo_card": card, "old_trunfo_card": trunfo_card, "player_id": self.current_player_number}}
                 del self.players[self.current_player_number][iterador]
+                self.played_cards.append(card)
                 is_possible=True
                 break
         if not is_possible:
@@ -183,7 +188,9 @@ class game:
             "table_deck": self.table_deck,
             "trunfo_card": self.trunfo_card, 
             "current_player": self.current_player_number,
-            "players": self.players
+            "players": self.players,
+            "played_cards": self.played_cards,
+            "gained_cards": self.gained_cards
         }
 
     def clone(self):
