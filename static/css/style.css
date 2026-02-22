@@ -3,3 +3,10 @@
     image-rendering: crisp-edges;
 }
 
+.player-hand-leave-active{
+    position: absolute;
+}
+
+.player-hand-move{
+transition: transform 0.5s ease;
+}

@@ -1,4 +1,4 @@
-const {createApp, ref, component, computed} = Vue;
+const {createApp, ref, reactive, component, computed} = Vue;
 
 const socket=io("http://localhost:8080")
 
@@ -16,34 +16,110 @@ const getRelativePosition=(currentPlayer, targetPlayer)=>{
 const positionConfig={
     "container":{
     "bottom": "absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-3",
-    "right": "absolute right-12 top-1/2 -translate-y-1/2 flex gap-2 -rotate-90",
+    "right": "absolute right-52 top-1/2 -translate-y-1/2 flex flex-col gap-2",
     "top": "absolute top-8 left-1/2 -translate-x-1/2 flex gap-2", 
-    "left": "absolute left-12 top-1/2 -translate-y-1/2 flex gap-2 rotate-90", 
+    "left": "absolute left-48 top-1/2 -translate-y-1/2 flex flex-col gap-2", 
 },
 "card":{
-    "bottom": "w-[84px] h-[124px] pixel-art shadow-2xl rounded cursor-pointer transitin-all duration-100 hover:-translate-y-5",
+    "bottom": "w-[84px] h-[124px] pixel-art shadow-2xl rounded cursor-pointer transition-transform duration-100 hover:-translate-y-5",
     "right": "w-[63px] h-[93px] pixel-art shadow-2xl rounded",
     "top": "w-[63px] h-[93px] pixel-art shadow-2xl rounded", 
-    "left": "w-[63px] h-[93px] pixel-art shadow-2xl rounded", 
+    "left": "w-[63px] h-[93px] pixel-art shadow-2xl rounded ", 
 },
+ "card-wrapper": {
+    "bottom": "w-[84px] h-[124px]",
+    "right": "w-[93px] h-[63px] -rotate-90",
+    "top": "w-[63px] h-[93px]", 
+    "left": "w-[93px] h-[63px]  rotate-90", 
+ },
 "discard-stack-card":{
     "bottom": "absolute bottom-[12rem] left-1/2 -translate-x-1/2 -rotate-[5deg]",
-    "right": "absolute right-[38%] top-1/2 -translate-y-1/2 rotate-[80deg]",
-    "top": "absolute top-[12rem] left-1/2 -translate-x-1/2 rotate-[12deg]", 
-    "left": "absolute left-[38%] top-1/2 -translate-y-1/2 rotate-[85deg]", 
+    "right": "absolute right-[38%] top-1/2 -translate-y-1/2 -rotate-[86deg]",
+    "top": "absolute top-[12rem] left-1/2 -translate-x-1/2 rotate-[4deg]", 
+    "left": "absolute left-[38%] top-1/2 -translate-y-1/2 -rotate-[85deg]", 
 }, 
 "player-stack": { 
     "bottom": "absolute bottom-32 right-[32.5%] -translate-x-1/2",
-    "right": "absolute right-48 top-1/4 -translate-y-1/2 -rotate-90",
+    "right": "absolute right-64 top-1/4 -translate-y-1/2 -rotate-90",
 }
 }
+
+const equalate=(vector1, vector2)=>{
+for(let i=vector1.length-1; i>=0; i--){ 
+    if(!vector2.some(e => e.id===vector1[i].id)){
+        vector1.splice(i, 1); 
+    }
+}
+for(const element of vector2){ 
+    if(!vector1.some(e=> e.id===element.id)){
+        vector1.push(element); 
+    }
+}
+}
+
+const enterPlayerDeck=(card, done)=>{
+const deck=document.querySelector('#main-deck'); 
+card.style.opacity='0'; 
+
+requestAnimationFrame(()=>{
+const deckReact=deck.getBoundingClientRect(); 
+const cardReact=card.getBoundingClientRect(); 
+
+card.style.transform=`translate(${deckReact.left-cardReact.left}px, ${deckReact.top-cardReact.top}px) scale(0.75)`;
+card.style.opacity='1'; 
+card.offsetHeight;
+
+requestAnimationFrame(()=>{
+
+card.style.transition="transform 0.8s ease"; 
+card.style.transform="translate(0,0) scale(1)"
+
+setTimeout(done, 800);
+}); 
+});
+};
+
+let lastCardReact=null;
+let lastCardIsMine=false;
+const leavePlayerDeck=(card, done)=> {
+    if (!lastCardIsMine)
+        lastCardReact=card.getBoundingClientRect(); 
+    lastCardIsMine=false;
+    done();
+}; 
+
+const enterDiscartStack=(card,done)=>{
+    if(!lastCardReact){
+        console.log("erro: carta não encontrada"); 
+        return; 
+    }
+card.style.opacity='0'; 
+
+requestAnimationFrame(()=>{
+const cardReact=card.getBoundingClientRect();  
+
+card.style.transform=`translate(${lastCardReact.left-cardReact.left}px, ${lastCardReact.top-cardReact.top}px)`;
+card.style.opacity='1'; 
+card.offsetHeight;
+
+requestAnimationFrame(()=>{
+
+card.style.transition="transform 0.5s ease"; 
+card.style.transform=""
+
+setTimeout(done, 500);
+}); 
+});
+
+};
+
+let global_card_counter=0; 
 
 const app=createApp({
     setup() {
         const room=ref(1);
         console.log("conectando com o servidor...");
         socket.emit('join_room', {'room': room.value});
-        const playersDeckSize=ref([0,0,0,0]);
         const trunfoCard=ref("");   
         const deckSize=ref(40); 
         const playerDeck=ref([]);
@@ -58,6 +134,10 @@ const app=createApp({
         const mainDeckSize=computed(()=>Math.max(deckSize.value-1,0)); 
         const endGame=ref(false); 
         const winners=ref([-1,-1]); 
+        const isShuffling=ref(false); 
+        const playersCardsUid=ref([[],[],[], []]); 
+        const wait=(ms)=>new Promise(resolve => setTimeout(resolve,ms)); 
+
         socket.on('inital-data', data => {
             console.log("conectado na sala", room.value);
             console.log("conectado com id =", data["id"]); 
@@ -71,9 +151,16 @@ const app=createApp({
             opponentTeamScore.value["regional"]=data["team_score"][(id.value+1)%2];
             ownTeamScore.value["global"]=data["global_score"][id.value%2];
             opponentTeamScore.value["global"]=data["global_score"][(id.value+1)%2];
-            playerDeck.value=data["players"][id.value];
-            for(let player=0; player<=3;player++)
-                playersDeckSize.value[player]=data["players"][player].length;
+            equalate(playerDeck.value,data["players"][id.value]);
+            while(playerDeck.value.length!==data['players'][id.value].length){
+                
+            }
+            for(let player=0; player<=3;player++){
+                while(data["players"][player].length<playersCardsUid.value[player].length)
+                    playersCardsUid.value[player].pop(); 
+                while(data["players"][player].length>playersCardsUid.value[player].length)
+                    playersCardsUid.value[player].push(global_card_counter++);
+            }
             trunfoCard.value=data["trunfo_card"]["id"];
             currentPlayer.value=data["current_player"];
             deckSize.value=data["deck"].length;
@@ -85,9 +172,9 @@ const app=createApp({
         });
 
         socket.on('play-card', data=>{
-            console.log(`carta ${data['card']} jogada`);
+            if(currentPlayer.value!==id.value)
+                playersCardsUid.value[currentPlayer.value].pop();
             tableDeck.value.push({"id": data['card'], "player": currentPlayer.value});
-            playersDeckSize.value[currentPlayer.value]--;
             currentPlayer.value=data['next_player']; 
         });
 
@@ -95,6 +182,7 @@ const app=createApp({
             for(let cardIdx=0; cardIdx<playerDeck.value.length; cardIdx++){
                 if(playerDeck.value[cardIdx]['id']===card){
                     playerDeck.value.splice(cardIdx, 1);
+                    playersCardsUid.value[id.value].splice(cardIdx, 1); 
                     break;
                 }
             }
@@ -114,17 +202,21 @@ const app=createApp({
 
         socket.on('end-hand', data=>{
             setTimeout(()=>{
-            tableDeck.value=data["table_deck"];
-            deckSize.value=data['deck'].length;
-            if (deckSize.value==0)
-                trunfoCard.value=""; 
+            while(tableDeck.value.length>0)
+                tableDeck.value.pop(); 
             playedCards.value=data["gained_cards"];
             ownTeamScore.value["regional"]=data["team_score"][id.value%2];
             opponentTeamScore.value["regional"]=data["team_score"][(id.value+1)%2];
-            for(let player=0;player<=3;player++)
-                playersDeckSize.value[player]=data["players"][player].length;
-            playerDeck.value=data['players'][id.value]=data['players'][id.value];
-
+            for(let player=0;player<=3;player++){
+                 while(data["players"][player].length<playersCardsUid.value[player].length)
+                    playersCardsUid.value[player].pop(); 
+                while(data["players"][player].length>playersCardsUid.value[player].length)
+                    playersCardsUid.value[player].push(global_card_counter++);
+            }
+            equalate(playerDeck.value,data["players"][id.value]);
+            deckSize.value=data['deck'].length;
+            if (deckSize.value==0)
+                trunfoCard.value=""; 
             },500)
         });
 
@@ -139,9 +231,29 @@ const app=createApp({
             console.log("Fim de jogo!\nvencedores:", data);
             winners.value=data; 
             endGame.value=true;
-            tableDeck.value=[]; 
+            while(tableDeck.value.length>0)
+                tableDeck.value.pop(); 
             socket.emit('finish_game', room.value);
             gameStarded.value=false; 
+        });
+
+        socket.on("shuffle",async ()=>{
+            deckSize.value=40;
+            gameStarded.value=true;
+            while(tableDeck.value.length>0)
+                tableDeck.value.pop(); 
+            playedCards.value=[0,0]; 
+            await wait(100); 
+            isShuffling.value=true; 
+            await wait(800); 
+            isShuffling.value=false; 
+            await wait(900)
+            isShuffling.value=true; 
+            await wait(800); 
+            isShuffling.value=false; 
+            await wait(1200);
+            
+            socket.emit('shuffle_finished', room.value);
         });
 
         const startGame=()=>{
@@ -150,8 +262,10 @@ const app=createApp({
             socket.emit('start_game', room.value);
         }
 
-        const playCard=(cardIdx)=>{
+        const playCard=(cardIdx, el)=>{
             if (currentPlayer.value!=id.value) return;
+            lastCardReact=el.getBoundingClientRect(); 
+            lastCardIsMine=true; 
             const card=playerDeck.value[cardIdx];
             const data={
                 "room": room.value,
@@ -161,8 +275,8 @@ const app=createApp({
             socket.emit('play_card', data); 
         }
 
-        return {room, id, trunfoCard, deckSize, playerDeck, ownTeamScore, opponentTeamScore, tableDeck, currentPlayer,
-               playersDeckSize, playedCards, isHost, gameStarded, mainDeckSize, endGame, winners, startGame,  playCard}
+    return {room, id, trunfoCard, deckSize, playerDeck, ownTeamScore, opponentTeamScore, tableDeck, currentPlayer, playersCardsUid,
+            isShuffling, playedCards, isHost, gameStarded, mainDeckSize, endGame, winners, startGame,  playCard}
     }
 });
 
@@ -171,28 +285,56 @@ app.component("deck",{
         deckSize: {
             type: Number,
             required: true
+        }, 
+        isShuffling: {
+            type: Boolean,
+            default: false
+        },
+        maxVisibleCards: {
+            type: Number, 
+            default: 8
         }
     },
     setup(props) {
-        const visibleCards=computed(()=>Math.min(props.deckSize,8)); 
+        const visibleCards=computed(()=>Math.min(props.deckSize,props.maxVisibleCards)); 
         const depthGrowthValue=computed(()=>{
           if(visibleCards.value==0) return 0;
           return props.deckSize/visibleCards.value;
         });
         const opacityGrowthValue = computed(()=> visibleCards.value==0 ? 0 : 0.4/visibleCards.value); 
-        return {visibleCards, opacityGrowthValue, depthGrowthValue}
+        const basicTranslation=(card)=>(visibleCards.value-card)*0.25*depthGrowthValue.value;
+        const cardShuffling=card=>{
+            const linear=(card-1)/(visibleCards.value-1);
+            const amplitude=10+12*linear; 
+            const curve=3*linear*(1-linear);
+            const bell=curve*0.8+linear*1.2;  
+            const x=Math.sin(card*12.9898)*471289.98312273; 
+            const direction=x-Math.floor(x)>=0.5? 1 : -1; 
+            const xTranslation= direction*bell**1.11*amplitude;
+            const yTranslation = Math.abs(xTranslation)*0.2;  
+            const rotation=direction*(3*linear);
+            return `translate(${basicTranslation(card)+xTranslation}px, ${basicTranslation(card)+ yTranslation}px) rotate(${rotation}deg)
+            `
+        }
+        return {visibleCards, opacityGrowthValue, depthGrowthValue,basicTranslation, cardShuffling}
     },
     template: `
-    <div class="relative w-[63px] h-[93px]">
+    <div class="relative w-[63px] h-[93px] perspective-[800px]">
      <img 
       v-for="card in visibleCards"
       :key="card"
       src="/static/assets/cards/CardBack_v12.png"
-        class="absolute w-[63px] h-[93px] pixel-art"
+        class="absolute w-[63px] h-[93px] pixel-art transform-gpu"
         :style="{
-        transform: 'translate('+ ((visibleCards-card)*0.25*depthGrowthValue) + 'px,' + ((visibleCards-card)*0.25*depthGrowthValue) + 'px)',
+        willChange: isShuffling ? 'transform' : 'none',
+        transition: 'transform 0.45s ease ' + card*15 + 'ms',
+        transform: isShuffling 
+        ? cardShuffling(card)
+        : 'translate('+ basicTranslation(card) + 'px,' + basicTranslation(card) + 'px)',
+
         zIndex: card,
-        opacity: 0.6+card*opacityGrowthValue,
+
+        opacity: isShuffling ? 1 : 0.6+card*opacityGrowthValue,
         }"
       />
       </div>
@@ -208,12 +350,16 @@ props: {
     trunfoCard: {
         type: String || undefined, 
         required: true
-    }
+    },
+    isShuffling: {
+            type: Boolean,
+            required: true,
+        }
 },
 template: `
 <div class="absolute left-[30%] top-[23%]">
 <div class="relative inline-block"> 
-<deck :deck-size="deckSize"></deck>
+<deck :deck-size="deckSize" :is-shuffling="isShuffling" :max-visible-cards="40"></deck>
 <img 
 v-if=" trunfoCard!=='' "
 :src="'static/assets/cards/'+trunfoCard+'.png'"
@@ -244,16 +390,17 @@ const difStyleArray=computed(()=>{
 }
     return dif; 
 });
-return {difStyleArray};
+const enter=enterDiscartStack; 
+return {difStyleArray, enter};
 },
 template: `
-<div class="w-full h-full">
+<transition-group name="table-stack" tag="div" class="w-full h-full" @enter="enter">
 <img v-for="(card,index) in deck"
-    :key="index"
+    :key="card['id']"
     :src="'static/assets/cards/'+card['id']+'.png'"
     :class="'w-[84px] h-[124px] pixel-art shadow-2xl rounded ' + difStyleArray[card['player']]"
 />
-</div>
+</transition-group>
 `
 });
 
@@ -263,7 +410,7 @@ props: {
         type: Number, 
         required: true
     }, 
-    playersDeckSize: {
+    playersCardsUid: {
         type: Array,
         required: true
     },
@@ -293,41 +440,45 @@ const difContainerStyle=computed(()=>{
     return dif; 
 });
 
-const playersDeck=computed(()=>{
-  const deck=[[],[],[],[]]; 
-  for (let id=0; id<=3;id++){
-    if(id===props.playerId){
-    for (const card of props.playerDeck){
-        deck[id].push("static/assets/cards/"+card["id"]+".png");
-    }
-    }else{
-        for(let card=1;card<=props.playersDeckSize[id]; card++){
-            deck[id].push("static/assets/cards/CardBack_v12.png");
-        }
-    }
-  }
-  return deck;
-}); 
-const playCard=(card)=>{
-emit('playCard', card);
+const difCardWrapperStyle=computed(()=>{
+    let dif=[];
+    const containerStyle=positionConfig["card-wrapper"];
+    for(let id=0;id<=3;id++){
+        let relativePosition=getRelativePosition(props.playerId, id); 
+        dif.push(containerStyle[relativePosition]); 
 }
+    return dif; 
+});
+
+const playCard=(card, event)=>{
+    const el=event.currentTarget.closest('.inline-block'); 
+emit('playCard', card, el);
+}
+const enter=enterPlayerDeck;
+const leave=leavePlayerDeck; 
 const ids=[0,1,2,3];
-return {difCardStyle,difContainerStyle,playersDeck, ids, playCard}
+return {difCardStyle,difContainerStyle,difCardWrapperStyle, ids, playCard, enter, leave}
 },
 template: `
 <div class="w-full h-full">
-<div
-v-for="id in ids"
-:key="id"
+<div v-for="id in ids" :key="id">
+<transition-group
+tag="div"
+name="player-hand"
+@enter="enter"
+@leave="leave"
 :class="difContainerStyle[id]"
 >
+<div v-for="(uid,index) in playersCardsUid[id]" :key="uid" class="inline-block">
+<div :class="difCardWrapperStyle[id]">
 <img 
-v-for="(card,index) in playersDeck[id]"
-:key="index"
-:src="card"
+:src="'static/assets/cards/' + (id===playerId ? playerDeck[index]['id'] : 'CardBack_v12') +'.png'"
 :class="difCardStyle[id]"
-@click="id===playerId ? playCard(index) : null"
+@click="id===playerId ? playCard(index, $event) : null"
 />
+</div>
+</div>
+</transition-group>
 </div>
 </div>
 `

@@ -22,9 +22,9 @@ def process_play(room, player_id, card):
         output = games[room].play_card(card)
         output_type, output_data=output["type"], output["content"]
         if output_type!="trade":
-            socketio.emit('play-card', {'card': card['id'], 'next_player': games[room].current_player_number}, room=room)
             if players_type[room][player_id]=="player":
                 socketio.emit('player-play-card',card['id'], to=players_sid_reverse[room][player_id])
+            socketio.emit('play-card', {'card': card['id'], 'next_player': games[room].current_player_number}, room=room)
         if output_type=="game over":
             print(f"Fim de jogo! na room {room}\n jogadores {output_data[0]} e {output_data[1]} ganharam!")
             socketio.emit ('end-game', output_data, room=room)
@@ -45,7 +45,7 @@ def process_play(room, player_id, card):
         return "illegal-play"
 
 def bot_turn(room, player_id):
-    socketio.sleep(1)
+    socketio.sleep(1.4)
     hand=games[room].players[player_id]
     trunfo=games[room].trunfo
     table_deck=games[room].table_deck
@@ -105,7 +105,17 @@ def start_game(room):
         return
     games[room]=game(host[room])
     game_started[room]=True
-    emit('get-game-state', games[room].get_general_state(), room=room)
+    emit('shuffle', room=room)
+    current_player=games[room].current_player_number
+    if players_type[room][current_player] !="player": 
+        socketio.start_background_task(bot_turn, room, current_player)
+
+@socketio.on('shuffle_finished')
+def handle_send_game_state(room):
+    emit('get-game-state', games[room].get_general_state())
+    next_player=games[room].current_player_number
+    if players_type[room][next_player]!="player": 
+        socketio.start_background_task(bot_turn,room,next_player)   
 
 @socketio.on('play_card')
 def play_card(data):
@@ -123,15 +133,12 @@ def play_card(data):
         return
     output_type=process_play(data["room"], data["player_id"], data["card"])     
     next_player=(data["player_id"]+1)%4
-    if players_type[data['room']][next_player]!="player" and output_type!="game over": 
+    if players_type[data['room']][next_player]!="player" and output_type not in("game over","round over"): 
         socketio.start_background_task(bot_turn,data['room'],next_player)
 
 @socketio.on('end_round')
 def handle_end_round(room): 
-    emit('get-game-state', games[room].get_general_state(), room=room)
-    next_player=games[room].current_player_number
-    if players_type[room][next_player]!="player": 
-        socketio.start_background_task(bot_turn,room,next_player)   
+    emit('shuffle', room=room)
 
 @socketio.on('finish_game')
 def handle_finish_game(room): 
@@ -150,6 +157,9 @@ def handle_disconnect():
     del players_sid[request.sid]
     players_type[room][id]="medium_bot"
     print(f"jogador com id {id} na sala {room} desconectado")
+    if not players_id[room]: 
+        game_started[room]=False
+        games[room]=None
         
 @app.route("/")
 def index():
