@@ -1,4 +1,4 @@
-const {createApp, ref, reactive, component, computed} = Vue;
+const {createApp, ref, reactive, component, computed, nextTick} = Vue;
 
 const socket=io("http://localhost:8080")
 
@@ -107,13 +107,70 @@ requestAnimationFrame(()=>{
 card.style.transition="transform 0.5s ease"; 
 card.style.transform=""
 
-setTimeout(done, 500);
+setTimeout(()=>{
+    done();
+    
+    card.style.transition="";  
+    card.style.transform="";
+    card.style.opacity="";     
+}, 500);
+
 }); 
 });
 
 };
 
+let lastWinner=null; 
+let ThisPlayerTeam=null;
+
+const leaveDiscartStack=(card,done)=>{
+const stack=document.querySelector(`#player-stack-${lastWinner}`); 
+const team=parseInt(card.dataset.team);
+requestAnimationFrame(()=>{
+ 
+const stackReact=stack.getBoundingClientRect(); 
+const cardReact=card.getBoundingClientRect(); 
+
+const stackDeg=lastWinner===ThisPlayerTeam ? 0 : -90;
+let deltaX=(stackReact.left+stackReact.width/2)-(cardReact.left+cardReact.width/2);
+let deltaY=(stackReact.top+stackReact.height/2)-(cardReact.top+cardReact.height/2);
+if(team===ThisPlayerTeam){
+    deltaX-=42;
+    deltaY-=2 
+}else{
+    deltaY-=57;
+}
+
+requestAnimationFrame(()=>{
+card.style.transition="transform 1.2s ease";
+card.style.transform=`translate(${deltaX}px, ${deltaY}px) rotate(${stackDeg}deg) scale(0.75)`;
+
+setTimeout(done, 1200); 
+});
+});
+
+}
+
+const wait=(ms)=>new Promise(resolve => setTimeout(resolve,ms)); 
+
 let global_card_counter=0; 
+
+let globalActionQueue=[];
+let isProcessing=false;
+
+const addInQueue=(actionfn)=>{
+    globalActionQueue.push(actionfn); 
+    processQueue();
+}
+
+const processQueue=async()=>{
+    if(isProcessing || globalActionQueue.length===0) return; 
+        isProcessing=true;
+        const fn=globalActionQueue.shift(); 
+        await fn(); 
+        isProcessing=false; 
+        processQueue(); 
+}
 
 const app=createApp({
     setup() {
@@ -136,7 +193,6 @@ const app=createApp({
         const winners=ref([-1,-1]); 
         const isShuffling=ref(false); 
         const playersCardsUid=ref([[],[],[], []]); 
-        const wait=(ms)=>new Promise(resolve => setTimeout(resolve,ms)); 
 
         socket.on('inital-data', data => {
             console.log("conectado na sala", room.value);
@@ -144,17 +200,20 @@ const app=createApp({
             id.value=data["id"];
             isHost.value=data["is_host"];
             gameStarded.value=data["game_starded"];
+            ThisPlayerTeam=id.value%2; 
+        });
+
+        socket.on('to-host', ()=>{
+            isHost.value=true;
         });
 
         socket.on('get-game-state', data=>{
-            ownTeamScore.value["regional"]=data["team_score"][id.value%2];
+            addInQueue(async()=>{
+                ownTeamScore.value["regional"]=data["team_score"][id.value%2];
             opponentTeamScore.value["regional"]=data["team_score"][(id.value+1)%2];
             ownTeamScore.value["global"]=data["global_score"][id.value%2];
             opponentTeamScore.value["global"]=data["global_score"][(id.value+1)%2];
             equalate(playerDeck.value,data["players"][id.value]);
-            while(playerDeck.value.length!==data['players'][id.value].length){
-                
-            }
             for(let player=0; player<=3;player++){
                 while(data["players"][player].length<playersCardsUid.value[player].length)
                     playersCardsUid.value[player].pop(); 
@@ -169,26 +228,34 @@ const app=createApp({
             gameStarded.value=true; 
             tableDeck.value=data["table_deck"];
             playedCards.value=data["gained_cards"]; 
+            await wait(800); 
+            });
         });
 
         socket.on('play-card', data=>{
+            addInQueue(async ()=>{
             if(currentPlayer.value!==id.value)
                 playersCardsUid.value[currentPlayer.value].pop();
             tableDeck.value.push({"id": data['card'], "player": currentPlayer.value});
             currentPlayer.value=data['next_player']; 
+            await wait(800); 
+            });
         });
 
         socket.on('player-play-card', card=>{
-            for(let cardIdx=0; cardIdx<playerDeck.value.length; cardIdx++){
+            addInQueue(()=>{
+                for(let cardIdx=0; cardIdx<playerDeck.value.length; cardIdx++){
                 if(playerDeck.value[cardIdx]['id']===card){
                     playerDeck.value.splice(cardIdx, 1);
                     playersCardsUid.value[id.value].splice(cardIdx, 1); 
                     break;
                 }
             }
+            });
         });
 
         socket.on('trade', data=>{
+            addInQueue(()=>{
             if (data["player_id"]===id.value){
                 for(let cardIdx=0;cardIdx<playerDeck.value.length;cardIdx++){
                     if (playerDeck.value[cardIdx]['id']===data['new_trunfo_card']['id']){
@@ -198,15 +265,22 @@ const app=createApp({
                 }
             }
             trunfoCard.value=data['new_trunfo_card']['id'];
+            });
         });
 
-        socket.on('end-hand', data=>{
-            setTimeout(()=>{
-            while(tableDeck.value.length>0)
-                tableDeck.value.pop(); 
+        async function collectTableDeck(data){
+            if (playedCards.value[0]<data['gained_cards'][0])
+                lastWinner=0;
+            else 
+                lastWinner=1; 
+            tableDeck.value=[]; 
+            await wait(1200);
             playedCards.value=data["gained_cards"];
             ownTeamScore.value["regional"]=data["team_score"][id.value%2];
             opponentTeamScore.value["regional"]=data["team_score"][(id.value+1)%2];
+        }
+        async function playersGetCardsFromDeck(data){
+            await wait(100); 
             for(let player=0;player<=3;player++){
                  while(data["players"][player].length<playersCardsUid.value[player].length)
                     playersCardsUid.value[player].pop(); 
@@ -215,19 +289,28 @@ const app=createApp({
             }
             equalate(playerDeck.value,data["players"][id.value]);
             deckSize.value=data['deck'].length;
+            nextTick(); 
             if (deckSize.value==0)
                 trunfoCard.value=""; 
-            },500)
+            await wait(500); 
+        }
+        socket.on('end-hand', data=>{
+            addInQueue(()=>collectTableDeck(data)); 
+           addInQueue(()=>playersGetCardsFromDeck(data)); 
         });
 
         socket.on("end-round", data=>{
-            console.log("round finalizado!", data);
+            addInQueue(()=>{
+              console.log("round finalizado!", data['score']);
+            currentPlayer.value=data['current_player']; 
             setTimeout(()=>{
                 socket.emit('end_round', room.value); 
-            },1000);
+            },1000);  
+            })
         });
 
         socket.on('end-game', data=>{
+            addInQueue(()=>{
             console.log("Fim de jogo!\nvencedores:", data);
             winners.value=data; 
             endGame.value=true;
@@ -235,9 +318,10 @@ const app=createApp({
                 tableDeck.value.pop(); 
             socket.emit('finish_game', room.value);
             gameStarded.value=false; 
+            });
         });
-
-        socket.on("shuffle",async ()=>{
+        
+        async function shuffle(){
             deckSize.value=40;
             gameStarded.value=true;
             while(tableDeck.value.length>0)
@@ -252,9 +336,8 @@ const app=createApp({
             await wait(800); 
             isShuffling.value=false; 
             await wait(1200);
-            
-            socket.emit('shuffle_finished', room.value);
-        });
+        }
+        socket.on("shuffle", ()=>addInQueue(shuffle));
 
         const startGame=()=>{
             console.log("iniciando jogo..."); 
@@ -391,14 +474,16 @@ const difStyleArray=computed(()=>{
     return dif; 
 });
 const enter=enterDiscartStack; 
-return {difStyleArray, enter};
+const leave=leaveDiscartStack;
+return {difStyleArray, enter, leave};
 },
 template: `
-<transition-group name="table-stack" tag="div" class="w-full h-full" @enter="enter">
+<transition-group name="table-stack" tag="div" class="relative w-full h-full" @enter="enter" @leave="leave">
 <img v-for="(card,index) in deck"
     :key="card['id']"
     :src="'static/assets/cards/'+card['id']+'.png'"
     :class="'w-[84px] h-[124px] pixel-art shadow-2xl rounded ' + difStyleArray[card['player']]"
+    :data-team="card['player']%2"
 />
 </transition-group>
 `
@@ -552,7 +637,7 @@ v-for="(deckSize,index) in playedCards"
 :class="difStyleArray[index]"
 >
 <div class="relative inline-block">
-<deck :deck-size="deckSize"></deck>
+<deck :deck-size="deckSize" :id="'player-stack-'+index"></deck>
 <p v-if="deckSize!==0" class="absolute left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 bg-black/15  text-white tracking-tight text-[0.9rem] drop-shadow-[0_3px_0px_rgba(0,0,0,1)] font-bold">
 ((score[index]))
 </p>

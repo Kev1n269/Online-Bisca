@@ -41,11 +41,10 @@ def process_play(room, player_id, card):
     except ValueError as e:
         if players_type[room][player_id]=="player":
             print("erro: ", e)
-            socketio.emit('illegal-play', str(e), to=players_sid_reverse[room][player_id])
+            socketio.emit('illegal-play', card, to=players_sid_reverse[room][player_id])
         return "illegal-play"
 
 def bot_turn(room, player_id):
-    socketio.sleep(1.4)
     hand=games[room].players[player_id]
     trunfo=games[room].trunfo
     table_deck=games[room].table_deck
@@ -106,16 +105,10 @@ def start_game(room):
     games[room]=game(host[room])
     game_started[room]=True
     emit('shuffle', room=room)
+    emit('get-game-state', games[room].get_general_state())
     current_player=games[room].current_player_number
     if players_type[room][current_player] !="player": 
         socketio.start_background_task(bot_turn, room, current_player)
-
-@socketio.on('shuffle_finished')
-def handle_send_game_state(room):
-    emit('get-game-state', games[room].get_general_state())
-    next_player=games[room].current_player_number
-    if players_type[room][next_player]!="player": 
-        socketio.start_background_task(bot_turn,room,next_player)   
 
 @socketio.on('play_card')
 def play_card(data):
@@ -132,13 +125,17 @@ def play_card(data):
         })
         return
     output_type=process_play(data["room"], data["player_id"], data["card"])     
-    next_player=(data["player_id"]+1)%4
+    next_player=games[data['room']].current_player_number
     if players_type[data['room']][next_player]!="player" and output_type not in("game over","round over"): 
         socketio.start_background_task(bot_turn,data['room'],next_player)
 
 @socketio.on('end_round')
 def handle_end_round(room): 
     emit('shuffle', room=room)
+    emit('get-game-state', games[room].get_general_state())
+    next_player=games[room].current_player_number
+    if players_type[room][next_player]!="player": 
+        socketio.start_background_task(bot_turn,room,next_player)
 
 @socketio.on('finish_game')
 def handle_finish_game(room): 
@@ -160,6 +157,12 @@ def handle_disconnect():
     if not players_id[room]: 
         game_started[room]=False
         games[room]=None
+    elif host[room]==id:
+        for idx in range(4):
+            if players_type[room][idx]=='player':
+                host[room]=idx
+                socketio.emit('to-host', to=players_sid_reverse[room][idx])
+                break
         
 @app.route("/")
 def index():
