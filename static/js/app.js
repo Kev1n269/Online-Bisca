@@ -190,6 +190,7 @@ const app=createApp({
         const gameStarded=ref(false);
         const mainDeckSize=computed(()=>Math.max(deckSize.value-1,0)); 
         const endGame=ref(false); 
+        const winnerText=ref(""); 
         const winners=ref([-1,-1]); 
         const isShuffling=ref(false); 
         const playersCardsUid=ref([[],[],[], []]); 
@@ -313,10 +314,17 @@ const app=createApp({
         });
 
         socket.on('end-game', data=>{
+            addInQueue(()=>collectTableDeck(data)); 
             addInQueue(()=>{
             console.log("Fim de jogo!\nvencedores:", data);
-            winners.value=data; 
+            playedCards.value=[0,0];
+            deckSize.value=40; 
             endGame.value=true;
+            winners.value=data['winners']; 
+            if(winners.value[0]==id.value%2)
+                winnerText.value="Parabéns! Você venceu!";
+            else
+                winnerText.value="Que pena. Você perdeu!";
             while(tableDeck.value.length>0)
                 tableDeck.value.pop(); 
             socket.emit('finish_game', room.value);
@@ -324,6 +332,38 @@ const app=createApp({
             });
         });
         
+        let illegalPlayRunning=false; 
+        socket.on('illegal-play', cardId=>{
+            if(illegalPlayRunning) return; 
+            let cardIndex=-1;
+            for(let i=0;i<playerDeck.value.length; i++){ 
+                if(playerDeck.value[i]['id']==cardId){
+                    cardIndex=i; 
+                    break;
+                }
+            }
+            if(cardIndex==-1){
+                console.log("erro: carta não encontrada no lance ilegal");
+                return;  
+            }
+            addInQueue(()=>{
+                illegalPlayRunning=true; 
+            const card=document.querySelector("#player-hand-"+id.value+"-"+cardIndex);
+            return new Promise(done =>{
+                if(!card){
+                console.log('carta não existe no DOM');  
+                done();
+            }
+            card.classList.add('shake-animation');    
+            card.addEventListener("animationend",()=>{
+                card.classList.remove('shake-animation');
+                illegalPlayRunning=false;
+                done()
+            }, {once: true});
+            });
+        });
+        });
+
         async function shuffle(){
             deckSize.value=40;
             gameStarded.value=true;
@@ -343,9 +383,12 @@ const app=createApp({
         socket.on("shuffle", ()=>addInQueue(shuffle));
 
         const startGame=()=>{
+            addInQueue(()=>{
             console.log("iniciando jogo..."); 
             endGame.value=false;
+            winnerText.value=""; 
             socket.emit('start_game', room.value);
+            });
         }
 
         const playCard=(cardIdx, el)=>{
@@ -362,7 +405,7 @@ const app=createApp({
         }
 
     return {room, id, trunfoCard, deckSize, playerDeck, ownTeamScore, opponentTeamScore, tableDeck, currentPlayer, playersCardsUid,
-            isShuffling, playedCards, isHost, gameStarded, mainDeckSize, endGame, winners, startGame,  playCard}
+            isShuffling, playedCards, isHost, gameStarded, mainDeckSize, endGame, winners, winnerText, startGame,  playCard}
     }
 });
 
@@ -557,7 +600,7 @@ name="player-hand"
 @leave="leave"
 :class="difContainerStyle[id]"
 >
-<div v-for="(uid,index) in playersCardsUid[id]" :key="uid" class="inline-block">
+<div v-for="(uid,index) in playersCardsUid[id]" :key="uid" class="inline-block" :id="'player-hand-'+id+'-'+index">
 <div :class="difCardWrapperStyle[id]">
 <img 
 :src="'static/assets/cards/' + (id===playerId ? playerDeck[index]['id'] : 'CardBack_v12') +'.png'"

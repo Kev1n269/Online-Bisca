@@ -26,7 +26,7 @@ def process_play(room, player_id, card):
                 socketio.emit('player-play-card',card['id'], to=players_sid_reverse[room][player_id])
             socketio.emit('play-card', {'card': card['id'], 'next_player': games[room].current_player_number, "score": games[room].global_score}, room=room)
         if output_type=="game over":
-            print(f"Fim de jogo! na room {room}\n jogadores {output_data[0]} e {output_data[1]} ganharam!")
+            print(f"Fim de jogo! na room {room}\n jogadores {output_data['winners'][0]} e {output_data['winners'][1]} ganharam!")
             socketio.emit ('end-game', output_data, room=room)
             games[room]=game()
         elif output_type=="round over":
@@ -41,7 +41,7 @@ def process_play(room, player_id, card):
     except ValueError as e:
         if players_type[room][player_id]=="player":
             print("erro: ", e)
-            socketio.emit('illegal-play', card, to=players_sid_reverse[room][player_id])
+            socketio.emit('illegal-play', card['id'], to=players_sid_reverse[room][player_id])
         return "illegal-play"
 
 def bot_turn(room, player_id):

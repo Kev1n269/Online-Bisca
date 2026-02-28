@@ -28,7 +28,7 @@ class game:
         self.deck=sample(inital_deck, len(inital_deck))
         self.players=[]
         self.team_score=[0,0] 
-        self.global_score=[0,0]
+        self.global_score=[0, 0]
         self.table_deck=[]
         self.played_cards=[]
         self.gained_cards=[0,0]
@@ -82,8 +82,6 @@ class game:
                 self.global_score[winner%2]+=2
         elif first_is_7 and self.deck: 
             self.global_score[winner%2]+=1
-        if self.global_score[0]>=4 or self.global_score[1]>=4: 
-            return self._finish_game()
         if self.deck:
             current=winner
             for i in range(self.players_number):
@@ -137,9 +135,9 @@ class game:
                
     def _finish_game(self):
         if self.global_score[0]>=4:
-            return {"type": "game over", "content": [1,3]}
+            return {"type": "game over", "content": self.get_general_state() | {'winners': [1,3]}}
         elif self.global_score[1]>=4:
-            return {"type": "game over", "content": [2,4]}
+            return {"type": "game over", "content": self.get_general_state() | {'winners': [2,4]}}
         else:
             raise ValueError("Nenhum time venceu")
 

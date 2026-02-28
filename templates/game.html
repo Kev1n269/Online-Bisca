@@ -8,8 +8,14 @@
         <main-deck id="main-deck" :is-shuffling="isShuffling" :deck-size="mainDeckSize" :trunfo-card="trunfoCard" class="absolute inset-0"></main-deck>
         <scoreboard v-if="gameStarded" :own-team-score="ownTeamScore['global']" :opponent-team-score="opponentTeamScore['global']" class="absolute inset-0"></scoreboard>
         <players-stack :player-id="id" :played-cards="playedCards" :own-team-score="ownTeamScore['regional']" :opponent-team-score="opponentTeamScore['regional']" class="absolute inset-0"></players-stack>
+        <transition name="startButton">
         <button v-if="isHost && !gameStarded" @click="startGame()" class="absolute bottom-48 left-1/2 -translate-x-1/2 z-50 w-48 h-28 bg-amber-400 ring-2 ring-amber-300/40 text-black text-xl border-2 border-neutral-800 rounded-full cursor-pointer hover:bg-amber-600 hover:ring-amber-200/60 transition-all duration-200">Começar o jogo</button>
-        <h1 v-if="endGame" class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-36 h-28 border-2 border-stone-950 bg-black text-white font-bold">Jogadores ((winners[0])) e ((winners[1])) ganharam!</h1>
-    </div>
+        </transition>
+        <transition name="endGame">
+            <div v-if="endGame" class="absolute inset-0 z-40 flex flex-col items-center justify-center gap-4 bg-black/40">
+                <p class="-translate-y-12 text-amber-400 uppercase tracking-widest text-2xl">Fim de jogo</p>
+                <h1 class="-translate-y-12 text-6xl text-amber-500   font-bold" style="font-family: Georgia, 'Times New Roman', Times, serif;">((winnerText))</h1>
+            </div>
+        </transition>
 </div>
 {%endblock%}
