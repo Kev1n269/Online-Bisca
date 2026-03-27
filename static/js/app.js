@@ -70,7 +70,7 @@ for(const element of vector2){
 
 const waitImage=(card, cb)=>{
 const img=card.querySelector('img') || null;
-if(!img) {cb(); return; }
+if(!img) {console.log("carta não encontrada em", card, "!"); cb(); return; }
 if(img.complete)
     cb();
 else
