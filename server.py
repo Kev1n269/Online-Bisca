@@ -80,7 +80,7 @@ def handle_join(data):
     room=data['room']
     if room >= max_rooms:
         return
-    tables[room]['size']+=1
+    tables[room]['size']+=1 
     socketio.emit('change_table', tables)
     print(f"inciando entrada na sala {room}...")
     join_room(room)

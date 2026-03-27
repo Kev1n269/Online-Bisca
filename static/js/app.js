@@ -69,8 +69,8 @@ for(const element of vector2){
 }
 
 const waitImage=(card, cb)=>{
-const img=card.querySelector('img') || card;
-if(!img) return; 
+const img=card.querySelector('img') || null;
+if(!img) {cb(); return; }
 if(img.complete)
     cb();
 else
@@ -111,6 +111,8 @@ const leavePlayerDeck=(card, done)=> {
 }; 
 
 const enterDiscartStack=(card,done)=>{
+    waitImage(card, async ()=>{
+
     if(!lastCardReact){
         console.log("erro: carta não encontrada"); 
         done();
@@ -139,6 +141,8 @@ setTimeout(()=>{
 
 }); 
 });
+
+    });
 };
 
 let lastWinner=null; 
