@@ -111,14 +111,13 @@ const leavePlayerDeck=(card, done)=> {
 }; 
 
 const enterDiscartStack=(card,done)=>{
-    waitImage(card, async ()=>{
-
     if(!lastCardReact){
         console.log("erro: carta não encontrada"); 
         done();
         return;  
     }
 card.style.opacity='0'; 
+    waitImage(card, async ()=>{
 requestAnimationFrame(()=>{
 const cardReact=card.getBoundingClientRect();  
 
