@@ -69,7 +69,7 @@ for(const element of vector2){
 }
 
 const waitImage=(card, cb)=>{
-const img=card.querySelector('img') || null;
+const img=card instanceof HTMLImageElement ? card : card.querySelector('img');
 if(!img) {console.log("carta não encontrada em", card, "!"); cb(); return; }
 if(img.complete)
     cb();
